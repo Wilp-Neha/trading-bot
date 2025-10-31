@@ -1,28 +1,39 @@
-name: Deploy to EC2
+name: Deploy Trading Bot to EC2
 
 on:
   push:
     branches:
-      - main   # Runs only when you push to main branch
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up SSH
-      uses: webfactory/ssh-agent@v0.8.0
-      with:
-        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
-    - name: Deploy Docker container on EC2
-      run: |
-        ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
-          docker pull nehapansare/trading-bot:latest
-          docker stop trading-bot || true
-          docker rm trading-bot || true
-          docker run -d -p 5000:5000 --name trading-bot nehapansare/trading-bot:latest
-        EOF
+      - name: Deploy to EC2
+        run: |
+          echo "🚀 Connecting to EC2 and redeploying container..."
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+            echo "🔹 Pulling latest image from Docker Hub..."
+            sudo docker pull nehapansare/trading-bot:latest
+
+            echo "🔹 Stopping old container if exists..."
+            sudo docker stop trading-bot || true
+
+            echo "🔹 Removing old container..."
+            sudo docker rm trading-bot || true
+
+            echo "🔹 Running new container..."
+            sudo docker run -d -p 5000:5000 --name trading-bot nehapansare/trading-bot:latest
+
+            echo "✅ Deployment complete!"
+            sudo docker ps
+          EOF
