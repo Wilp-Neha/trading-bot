@@ -1,20 +1,24 @@
-'''
-Mini Website Version of Trading Bot (Flask) + Advisory + Copy Trading + Algo Trading + Portfolio
-
-Steps to run:
-1. Install dependencies:  
-   pip install flask py5paisa
-
-2. Save this file as app.py
-3. Replace YOUR_REQUEST_TOKEN with a fresh one each run.
-4. Run: py app.py
-5. Open: http://127.0.0.1:5000/
-'''
-
 from flask import Flask, jsonify, render_template_string, request, redirect, url_for
+from flask_pymongo import PyMongo
 from py5paisa import FivePaisaClient
+from datetime import datetime
 
-# --- Credentials ---
+app = Flask(__name__)
+
+# --- MongoDB Configuration ---
+app.config["MONGO_URI"] = "mongodb+srv://tradinguser:9No99YJL1YAT71dM@cluster1.bv5s021.mongodb.net/tradingdb?retryWrites=true&w=majority"
+mongo = PyMongo(app)
+
+# --- Test Route ---
+@app.route("/testdb")
+def testdb():
+    try:
+        mongo.db.trades.insert_one({"name": "test_trade", "profit": 500})
+        return "✅ Successfully connected to MongoDB and inserted test record!"
+    except Exception as e:
+        return f"❌ MongoDB error: {e}"
+
+# --- 5Paisa Credentials ---
 cred = {
     "APP_NAME": "5P53420117",
     "APP_SOURCE": "25774",
@@ -25,13 +29,10 @@ cred = {
 }
 
 client = FivePaisaClient(cred=cred)
-# 🔹 Read token dynamically from file
 with open("token.txt", "r") as f:
     token = f.read().strip()
-
 client.get_oauth_session(token)
-# --- Flask App ---
-app = Flask(__name__)
+
 
 # Global variables for algo mode & trade log
 algo_mode = False
@@ -83,14 +84,28 @@ def market_status():
     return jsonify(status)
 
 # Trading Signals JSON
+# --- Trading Signals JSON ---
 @app.route("/signals")
 def signals():
     res = client.fetch_market_feed(market_feed)
     output = []
+
     for s in res["Data"]:
         price = s["LastRate"]
         sig, msg = simple_strategy(price, s["Symbol"])
-        output.append({"stock": s["Symbol"], "price": price, "signal": sig, "advice": msg})
+        trade_data = {
+            "stock": s["Symbol"],
+            "price": price,
+            "signal": sig,
+            "advice": msg,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        output.append(trade_data)
+
+        # ✅ Save only BUY/SELL signals
+        if sig in ["BUY", "SELL"]:
+            mongo.db.trades.insert_one(trade_data)
+
     return jsonify({"data": output})
 
 # Dashboard HTML
@@ -283,24 +298,21 @@ def portfolio():
 # Trade History (Mock Data)
 @app.route("/history")
 def history():
-    trades = [
-        {"stock":"RELIANCE","action":"BUY","price":2400,"profit":200},
-        {"stock":"TCS","action":"SELL","price":3500,"profit":150},
-        {"stock":"INFY","action":"HOLD","price":1420,"profit":0}
-    ]
+    trades = list(mongo.db.trades.find().sort("_id", -1))  # Latest first
+
     html = """
     <html>
     <head><title>Trade History</title></head>
     <body>
-      <h2>Trade History (Demo)</h2>
+      <h2>Trade History (MongoDB)</h2>
       <table border="1" cellpadding="10">
-        <tr><th>Stock</th><th>Action</th><th>Price</th><th>Profit</th></tr>
+        <tr><th>Stock</th><th>Action</th><th>Price</th><th>Timestamp</th></tr>
         {% for t in trades %}
         <tr>
           <td>{{ t.stock }}</td>
-          <td>{{ t.action }}</td>
+          <td>{{ t.signal }}</td>
           <td>{{ t.price }}</td>
-          <td>{{ t.profit }}</td>
+          <td>{{ t.timestamp }}</td>
         </tr>
         {% endfor %}
       </table>
@@ -312,4 +324,7 @@ def history():
     return render_template_string(html, trades=trades)
 
 if __name__ == "__main__":
+    print(app.url_map)  # just for confirmation
     app.run(host="0.0.0.0", port=5000, debug=True)
+
+
