@@ -4,13 +4,16 @@ FROM python:3.10-slim
 # Set working directory
 WORKDIR /app
 
-# Copy project files
-COPY . /app
+# Copy only requirements first (for better caching)
+COPY requirements.txt .
 
 # Install dependencies
-RUN pip install --no-cache-dir flask py5paisa
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port
+# Copy rest of the project files
+COPY . .
+
+# Expose Flask port
 EXPOSE 5000
 
 # Start the Flask app

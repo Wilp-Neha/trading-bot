@@ -1,0 +1,4 @@
+flask
+py5paisa
+flask-pymongo
+pymongo
