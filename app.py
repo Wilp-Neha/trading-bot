@@ -11,6 +11,12 @@ app.secret_key = "replace_this_with_a_secure_random_key"
 app.config["MONGO_URI"] = "mongodb+srv://tradinguser:9No99YJL1YAT71dM@cluster1.bv5s021.mongodb.net/tradingdb?retryWrites=true&w=majority"
 mongo = PyMongo(app)
 
+# --- Configure structured logging ---
+logging.basicConfig(
+    format='%(levelname)s | %(asctime)s | %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 # --- 5Paisa Credentials ---
 cred = {
     "APP_NAME": "5P53420117",
@@ -38,7 +44,9 @@ def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
         if not session.get("logged_in"):
+            app.logger.warning(f"WARNING | ACCESS | Unauthorized access attempt to {request.path}")
             return redirect(url_for("login"))
+        app.logger.info(f"INFO | ACCESS | User accessing {request.path}")
         return f(*args, **kwargs)
     return wrapper
 
