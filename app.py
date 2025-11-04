@@ -247,6 +247,7 @@ def signals():
     else:
         rows = ""
         for s in res["Data"]:
+          app.logger.info(f"📊 {s['Symbol']} | Price: {price} | Signal: {sig}")
             price = s["LastRate"]
             sig, msg = simple_strategy(price, s["Symbol"])
             color_class = "signal-buy" if sig=="BUY" else "signal-sell" if sig=="SELL" else "signal-hold"
