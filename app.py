@@ -144,18 +144,33 @@ BASE_HTML = """
 </body>
 </html>
 """
-
 # --- Login Page ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
     bg = "https://wallpapercave.com/wp/wp8172895.jpg"
     error = None
+
     if request.method == "POST":
-        if request.form["username"] == DEMO_USER and request.form["password"] == DEMO_PASS:
+        username = request.form["username"]
+        password = request.form["password"]
+
+        if username == DEMO_USER and password == DEMO_PASS:
             session["logged_in"] = True
+
+            # ✅ Log successful login to CloudWatch
+            app.logger.info(f"✅ User '{username}' logged in successfully at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+            # (Optional) If you refresh your trading token here:
+            # new_token = renew_token_function()
+            # app.logger.info(f"🔁 New token generated: {new_token[:8]}...")
+
             return redirect(url_for("dashboard"))
+
         else:
             error = "Invalid credentials"
+            # ⚠️ Log failed login attempt
+            app.logger.warning(f"❌ Failed login attempt for user '{username}' at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
     html = """
     <div style="display:flex;justify-content:center;align-items:center;min-height:70vh;">
       <div style="background:rgba(0,0,0,0.5);padding:24px;border-radius:10px;width:360px;text-align:center;">
