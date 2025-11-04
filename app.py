@@ -247,16 +247,51 @@ def signals():
     else:
         rows = ""
         for s in res["Data"]:
-          app.logger.info(f"📊 {s['Symbol']} | Price: {price} | Signal: {sig}")
             price = s["LastRate"]
             sig, msg = simple_strategy(price, s["Symbol"])
-            color_class = "signal-buy" if sig=="BUY" else "signal-sell" if sig=="SELL" else "signal-hold"
-            rows += f"<tr><td>{s['Symbol']}</td><td>{price}</td><td class='{color_class}'>{sig}</td><td>{msg}</td></tr>"
-        content = f"<h2>Trading Signals</h2><table><thead><tr><th>Stock</th><th>Price</th><th>Signal</th><th>Advice</th></tr></thead><tbody>{rows}</tbody></table>"
 
-         # ✅ Save only BUY/SELL signals
-        if sig in ["BUY", "SELL"]:
-            mongo.db.trades.insert_one(trade_data)
+            app.logger.info(f"📊 {s['Symbol']} | Price: {price} | Signal: {sig}")
+
+            trade_data = {
+                "stock": s["Symbol"],
+                "price": price,
+                "signal": sig,
+                "advice": msg,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+            # ✅ Save only BUY/SELL signals
+            if sig in ["BUY", "SELL"]:
+                try:
+                    mongo.db.trades.insert_one(trade_data)
+                    app.logger.info(f"✅ Inserted: {trade_data}")
+                except Exception as e:
+                    app.logger.warning(f"❌ Mongo insert failed: {e}")
+
+            color_class = (
+                "signal-buy" if sig == "BUY" else
+                "signal-sell" if sig == "SELL" else
+                "signal-hold"
+            )
+
+            rows += f"""
+            <tr>
+              <td>{s['Symbol']}</td>
+              <td>{price}</td>
+              <td class='{color_class}'>{sig}</td>
+              <td>{msg}</td>
+            </tr>
+            """
+
+        content = f"""
+        <h2>Trading Signals</h2>
+        <table>
+          <thead>
+            <tr><th>Stock</th><th>Price</th><th>Signal</th><th>Advice</th></tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+        """
     return render_template_string(BASE_HTML, title="Signals", content=content, bg_image=get_inner_bg())
 
 # --- Advisory ---
