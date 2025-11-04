@@ -4,6 +4,7 @@ from py5paisa import FivePaisaClient
 from datetime import datetime
 from functools import wraps
 import logging
+import sys
 
 app = Flask(__name__)
 app.secret_key = "replace_this_with_a_secure_random_key"
@@ -18,6 +19,18 @@ logging.basicConfig(
     level=logging.INFO,
     datefmt='%Y-%m-%d %H:%M:%S'
 )
+
+# --- Ensure Flask logs appear in CloudWatch (stdout) ---
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(levelname)s | %(asctime)s | %(message)s', '%Y-%m-%d %H:%M:%S')
+stream_handler.setFormatter(formatter)
+
+if not app.logger.handlers:
+    app.logger.addHandler(stream_handler)
+
+app.logger.setLevel(logging.INFO)
+
 # --- 5Paisa Credentials ---
 cred = {
     "APP_NAME": "5P53420117",
