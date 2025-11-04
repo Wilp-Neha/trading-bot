@@ -1,12 +1,13 @@
-from flask import Flask, render_template_string, request, redirect, url_for, session
+from flask import Flask, jsonify, render_template_string, request, redirect, url_for, session
 from flask_pymongo import PyMongo
 from py5paisa import FivePaisaClient
 from datetime import datetime
+from functools import wraps
 
 app = Flask(__name__)
-app.secret_key = "super_secret_key_123"  # Needed for sessions
+app.secret_key = "replace_this_with_a_secure_random_key"
 
-# --- MongoDB Config ---
+# --- MongoDB Configuration ---
 app.config["MONGO_URI"] = "mongodb+srv://tradinguser:9No99YJL1YAT71dM@cluster1.bv5s021.mongodb.net/tradingdb?retryWrites=true&w=majority"
 mongo = PyMongo(app)
 
@@ -21,9 +22,151 @@ cred = {
 }
 
 client = FivePaisaClient(cred=cred)
-with open("token.txt", "r") as f:
-    token = f.read().strip()
-client.get_oauth_session(token)
+try:
+    with open("token.txt", "r") as f:
+        token = f.read().strip()
+    client.get_oauth_session(token)
+    app.logger.info("Logged in!!")
+except Exception:
+    app.logger.warning("⚠️ 5Paisa token missing or expired.")
+
+# --- Login setup ---
+DEMO_USER = "admin"
+DEMO_PASS = "admin123"
+
+def login_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not session.get("logged_in"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return wrapper
+
+# --- Shared Base Layout ---
+BASE_HTML = """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ title or "Market Advisory System" }}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body {
+      margin:0; padding:0;
+      background: url('{{ bg_image }}') center/cover fixed no-repeat;
+      font-family: 'Segoe UI', Roboto, sans-serif;
+      color: #eaf6fb;
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+    }
+    header {
+      background: rgba(0,0,0,0.6);
+      padding: 14px 24px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.7);
+    }
+    .brand { font-weight:700; color:#00e5ff; font-size:18px; }
+    nav a {
+      color: #d9f4ff;
+      margin-right:14px;
+      text-decoration:none;
+      font-size:14px;
+    }
+    nav a:hover { color:#00e5ff; }
+    main {
+      width:min(1100px,96%);
+      margin:30px auto;
+      background: rgba(0,0,0,0.55);
+      padding:20px;
+      border-radius:10px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+    }
+    table { width:100%; border-collapse:collapse; color:#e8f7fb; }
+    th, td { padding:10px; border-bottom:1px solid rgba(255,255,255,0.08); text-align:left; }
+    th { color:#a9b8c4; font-size:13px; }
+    .signal-buy { color:#00ff99; font-weight:700; }
+    .signal-sell { color:#ff4d6d; font-weight:700; }
+    .signal-hold { color:#ffc966; font-weight:700; }
+    footer {
+      margin-top:auto;
+      padding:12px;
+      text-align:center;
+      font-size:14px;
+      background:rgba(0,0,0,0.5);
+      color:#9aa9b2;
+    }
+    .btn {
+      background: linear-gradient(90deg,#00e5ff,#2efb85);
+      border:none;
+      padding:8px 12px;
+      border-radius:6px;
+      color:#002;
+      font-weight:700;
+      cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">Automated Market Advisory System</div>
+    <nav>
+      {% if session.get('logged_in') %}
+        <a href="{{ url_for('market_status') }}">Market Status</a>
+        <a href="{{ url_for('signals') }}">Signals</a>
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('advisory') }}">Advisory</a>
+        <a href="{{ url_for('copytrading') }}">Copy Trading</a>
+        <a href="{{ url_for('algotrading') }}">Algo Trading</a>
+        <a href="{{ url_for('portfolio') }}">Portfolio</a>
+        <a href="{{ url_for('history') }}">History</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main>
+    {{ content|safe }}
+  </main>
+  <footer>
+    <a href="mailto:wilpneha@gmail.com" style="color:#00e5ff;">wilpneha@gmail.com</a>
+  </footer>
+</body>
+</html>
+"""
+
+# --- Login Page ---
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    bg = "https://wallpapercave.com/wp/wp8172895.jpg"
+    error = None
+    if request.method == "POST":
+        if request.form["username"] == DEMO_USER and request.form["password"] == DEMO_PASS:
+            session["logged_in"] = True
+            return redirect(url_for("dashboard"))
+        else:
+            error = "Invalid credentials"
+    html = """
+    <div style="display:flex;justify-content:center;align-items:center;min-height:70vh;">
+      <div style="background:rgba(0,0,0,0.5);padding:24px;border-radius:10px;width:360px;text-align:center;">
+        <h2 style="color:#00e5ff;margin-bottom:10px;">User Login</h2>
+        {% if error %}<p style="color:#ff4d6d;">{{ error }}</p>{% endif %}
+        <form method="post">
+          <input type="text" name="username" placeholder="Username" required style="width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:none;">
+          <input type="password" name="password" placeholder="Password" required style="width:100%;padding:10px;margin-bottom:12px;border-radius:6px;border:none;">
+          <button class="btn" type="submit">Login</button>
+        </form>
+      </div>
+    </div>
+    """
+    content = render_template_string(html, error=error)
+    return render_template_string(BASE_HTML, title="Login", content=content, bg_image=bg)
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 # --- Strategy ---
 def simple_strategy(price, stock):
@@ -34,241 +177,160 @@ def simple_strategy(price, stock):
     else:
         return ("HOLD", f"{stock} is stable, maintain current position.")
 
-# --- Market Feed List ---
+# --- Stocks list ---
 market_feed = [
-    {"Exch": "N", "ExchType": "C", "Symbol": "RELIANCE", "Expiry": "", "StrikePrice": "0", "OptionType": ""},
-    {"Exch": "N", "ExchType": "C", "Symbol": "TCS", "Expiry": "", "StrikePrice": "0", "OptionType": ""},
-    {"Exch": "N", "ExchType": "C", "Symbol": "INFY", "Expiry": "", "StrikePrice": "0", "OptionType": ""}
+    {"Exch":"N","ExchType":"C","Symbol":s,"Expiry":"","StrikePrice":"0","OptionType":""}
+    for s in ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","LT","WIPRO"]
 ]
 
-# --- HTML Templates ---
-login_html = """
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Login - Trading Bot</title>
-  <style>
-    body {
-      font-family: 'Poppins', sans-serif;
-      background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.8)),
-                  url('https://cdn.dribbble.com/users/1248377/screenshots/15087917/media/92e5b5d01116dfc80f4d6c189f48291d.png');
-      background-size: cover;
-      background-position: center;
-      height: 100vh;
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .login-box {
-      background-color: rgba(13,17,23,0.9);
-      padding: 40px;
-      border-radius: 10px;
-      text-align: center;
-      width: 350px;
-      box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
-    }
-    input[type=text], input[type=password] {
-      width: 90%;
-      padding: 10px;
-      margin: 10px 0;
-      border: none;
-      border-radius: 5px;
-      background-color: #161b22;
-      color: white;
-    }
-    button {
-      background-color: #238636;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 5px;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-    button:hover {
-      background-color: #2ea043;
-    }
-  </style>
-</head>
-<body>
-  <div class="login-box">
-    <h2>🤖 AI Trading Bot Login</h2>
-    <form method="POST" action="{{ url_for('login') }}">
-      <input type="text" name="username" placeholder="Username" required><br>
-      <input type="password" name="password" placeholder="Password" required><br>
-      <button type="submit">Login</button>
-    </form>
-    <p style="color:#aaa;font-size:13px;margin-top:15px;">Demo User: admin | Password: 1234</p>
-  </div>
-</body>
-</html>
-"""
+# --- Helpers ---
+def safe_fetch(func, *args, **kwargs):
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        app.logger.warning(f"5Paisa fetch failed: {e}")
+        return None
 
-# --- Base Template for Inner Pages ---
-base_html = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>{{ title }}</title>
-  <style>
-    body {
-        font-family: 'Segoe UI', sans-serif;
-        background: linear-gradient(rgba(13,17,23,0.9), rgba(13,17,23,0.9)),
-                    url('https://images.unsplash.com/photo-1642104704075-f7a315f1a77f?auto=format&fit=crop&w=1350&q=80');
-        background-size: cover;
-        background-attachment: fixed;
-        color: #c9d1d9;
-        margin: 0;
-        padding: 0;
-    }
-    header {
-        background-color: rgba(22,27,34,0.9);
-        padding: 12px 20px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        color: #58a6ff;
-    }
-    nav a {
-        color: #58a6ff;
-        margin-right: 15px;
-        text-decoration: none;
-        font-weight: 500;
-    }
-    nav a:hover { text-decoration: underline; color: #00c6ff; }
-    .container { width: 90%; margin: auto; padding: 25px; }
-    table {
-        border-collapse: collapse;
-        width: 85%;
-        margin: 20px auto;
-        background-color: rgba(22,27,34,0.8);
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    th, td {
-        border: 1px solid #30363d;
-        padding: 12px;
-        text-align: center;
-    }
-    th { background-color: #21262d; }
-    tr:hover { background-color: #2d333b; }
-    .buy { color: #00c853; }
-    .sell { color: #ff1744; }
-    .hold { color: #ffb300; }
-    h2 { color: #58a6ff; text-align: center; }
-    footer {
-        text-align: center;
-        padding: 25px;
-        color: #8b949e;
-        border-top: 1px solid #30363d;
-        background-color: rgba(13,17,23,0.95);
-    }
-    .logout {
-        color: #ff6b6b;
-        text-decoration: none;
-    }
-    .logout:hover { text-decoration: underline; }
-  </style>
-</head>
-<body>
-  <header>
-    <div><b>📊 Trading Bot Dashboard</b></div>
-    <nav>
-      <a href="{{ url_for('dashboard') }}">Dashboard</a>
-      <a href="{{ url_for('advisory') }}">Advisory</a>
-      <a href="{{ url_for('copytrading') }}">Copy Trading</a>
-      <a href="{{ url_for('algotrading') }}">Algo Trading</a>
-      <a href="{{ url_for('portfolio') }}">Portfolio</a>
-      <a href="{{ url_for('history') }}">History</a>
-      <a class="logout" href="{{ url_for('logout') }}">Logout</a>
-    </nav>
-  </header>
+def get_inner_bg():
+    return "https://img.freepik.com/premium-photo/black-modern-futuristic-trading-secret-thumbnail-background_769134-386.jpg"
 
-  <div class="container">
-    {{ content | safe }}
-  </div>
+@app.route("/")
+def home():
+    return redirect(url_for("login"))
 
-  <footer>
-    <p>© 2025 Automated Trading System | Flask + 5Paisa + MongoDB</p>
-    <p>📧 Contact: <a href="mailto:wilpneha@gmail.com" style="color:#58a6ff;">wilpneha@gmail.com</a></p>
-  </footer>
-</body>
-</html>
-"""
-
-# --- LOGIN SYSTEM ---
-@app.route("/", methods=["GET", "POST"])
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
-
-        if username == "admin" and password == "1234":
-            session["user"] = username
-            return redirect(url_for("dashboard"))
-        else:
-            return render_template_string(login_html + "<p style='color:red;text-align:center;'>Invalid credentials</p>")
-    return render_template_string(login_html)
-# --- Market Status (Live from 5Paisa) ---
 @app.route("/market_status")
 @login_required
 def market_status():
-    try:
-        status = client.get_market_status()
+    res = safe_fetch(client.get_market_status)
+    if not res:
+        content = "<h3>Market Status</h3><p style='color:#ff4d6d;'>Token expired or API unavailable.</p>"
+    else:
+        # Handle both dict and list formats
+        if isinstance(res, dict):
+            rows = "".join([f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in res.items()])
+        elif isinstance(res, list):
+            # List of markets
+            rows = ""
+            for item in res:
+                for k, v in item.items():
+                    rows += f"<tr><td>{k}</td><td>{v}</td></tr>"
+                rows += "<tr><td colspan='2'><hr style='border:0;border-top:1px solid rgba(255,255,255,0.2);'></td></tr>"
+        else:
+            rows = "<tr><td colspan='2'>Unexpected data format</td></tr>"
+
         content = f"""
-        <h2>📊 Market Status</h2>
+        <h2>Market Status</h2>
         <table>
-          <tr><th>Exchange</th><th>Status</th><th>Message</th></tr>
-          <tr><td>NSE</td><td>{status.get('NSE', {}).get('Status', 'N/A')}</td><td>{status.get('NSE', {}).get('Message', '')}</td></tr>
-          <tr><td>BSE</td><td>{status.get('BSE', {}).get('Status', 'N/A')}</td><td>{status.get('BSE', {}).get('Message', '')}</td></tr>
+          <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+          <tbody>{rows}</tbody>
         </table>
         """
-        return render_template_string(base_html, title="Market Status", content=content)
-    except Exception as e:
-        return render_template_string(base_html, title="Error", content=f"<h2>Error fetching market status: {e}</h2>")
+    return render_template_string(BASE_HTML, title="Market Status", content=content, bg_image=get_inner_bg())
 
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
 
-# --- LOGIN REQUIRED DECORATOR ---
-def login_required(f):
-    def wrapper(*args, **kwargs):
-        if "user" not in session:
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
-    wrapper.__name__ = f.__name__
-    return wrapper
-
-# --- INNER PAGES ---
-@app.route("/dashboard")
+# --- Signals Page ---
+@app.route("/signals")
 @login_required
-def dashboard():
-    res = client.fetch_market_feed(market_feed)
+def signals():
+    res = safe_fetch(client.fetch_market_feed, market_feed)
     if not res or "Data" not in res:
-        content = "<h2>⚠️ Token expired or data unavailable. Please refresh your token.</h2>"
-        return render_template_string(base_html, title="Dashboard", content=content)
+        content = "<p>No signal data (token expired).</p>"
+    else:
+        rows = ""
+        for s in res["Data"]:
+            price = s["LastRate"]
+            sig, msg = simple_strategy(price, s["Symbol"])
+            color_class = "signal-buy" if sig=="BUY" else "signal-sell" if sig=="SELL" else "signal-hold"
+            rows += f"<tr><td>{s['Symbol']}</td><td>{price}</td><td class='{color_class}'>{sig}</td><td>{msg}</td></tr>"
+        content = f"<h2>Trading Signals</h2><table><thead><tr><th>Stock</th><th>Price</th><th>Signal</th><th>Advice</th></tr></thead><tbody>{rows}</tbody></table>"
+    return render_template_string(BASE_HTML, title="Signals", content=content, bg_image=get_inner_bg())
 
-    rows = "".join([f"<tr><td>{s['Symbol']}</td><td>{s['LastRate']}</td><td class='{simple_strategy(s['LastRate'], s['Symbol'])[0].lower()}'>{simple_strategy(s['LastRate'], s['Symbol'])[0]}</td></tr>" for s in res["Data"]])
-    content = f"<h2>Live Market Dashboard</h2><table><tr><th>Stock</th><th>Price</th><th>Signal</th></tr>{rows}</table>"
-    return render_template_string(base_html, title="Dashboard", content=content)
-
+# --- Advisory ---
 @app.route("/advisory")
 @login_required
 def advisory():
-    res = client.fetch_market_feed(market_feed)
+    res = safe_fetch(client.fetch_market_feed, market_feed)
+    lines = []
+    if res and "Data" in res:
+        for s in res["Data"]:
+            price = s["LastRate"]
+            sig, msg = simple_strategy(price, s["Symbol"])
+            lines.append(f"{s['Symbol']} → {sig} (Price: {price}) → {msg}")
+    content = "<h2>Market Advisory Report</h2><ul>" + "".join([f"<li>{l}</li>" for l in lines]) + "</ul>"
+    return render_template_string(BASE_HTML, title="Advisory", content=content, bg_image=get_inner_bg())
+
+# --- Dashboard ---
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    res = safe_fetch(client.fetch_market_feed, market_feed)
     if not res or "Data" not in res:
-        content = "<h2>⚠️ Data unavailable.</h2>"
-        return render_template_string(base_html, title="Advisory", content=content)
+        content = "<p>No data.</p>"
+    else:
+        rows = ""
+        for s in res["Data"]:
+            price = s["LastRate"]
+            sig, _ = simple_strategy(price, s["Symbol"])
+            color_class = "signal-buy" if sig=="BUY" else "signal-sell" if sig=="SELL" else "signal-hold"
+            rows += f"<tr><td>{s['Symbol']}</td><td>{price}</td><td class='{color_class}'>{sig}</td></tr>"
+        content = f"<h2>Dashboard</h2><table><tr><th>Stock</th><th>Price</th><th>Signal</th></tr>{rows}</table>"
+    return render_template_string(BASE_HTML, title="Dashboard", content=content, bg_image=get_inner_bg())
 
-    items = "".join([f"<li><b>{s['Symbol']}</b> → {simple_strategy(s['LastRate'], s['Symbol'])[0]} (₹{s['LastRate']}) → {simple_strategy(s['LastRate'], s['Symbol'])[1]}</li>" for s in res["Data"]])
-    content = f"<h2>Market Advisory</h2><ul>{items}</ul>"
-    return render_template_string(base_html, title="Advisory", content=content)
+# --- Copy Trading ---
+@app.route("/copytrading")
+@login_required
+def copytrading():
+    res = safe_fetch(client.fetch_market_feed, market_feed)
+    master_trades, copied_trades = [], []
+    if res and "Data" in res:
+        for s in res["Data"]:
+            price = s["LastRate"]
+            sig, _ = simple_strategy(price, s["Symbol"])
+            master_trades.append({"stock": s["Symbol"], "price": price, "signal": sig})
+        followers = ["UserA", "UserB"]
+        for t in master_trades:
+            copied_trades.append({"trader":"Master","stock":t["stock"],"action":t["signal"],"price":t["price"],"status":"Executed"})
+            for f in followers:
+                copied_trades.append({"trader":f,"stock":t["stock"],"action":t["signal"],"price":t["price"],"status":"Copied"})
+    rows = "".join([f"<tr><td>{r['trader']}</td><td>{r['stock']}</td><td>{r['action']}</td><td>{r['price']}</td><td>{r['status']}</td></tr>" for r in copied_trades])
+    content = f"<h2>Copy Trading Simulation</h2><table><tr><th>Trader</th><th>Stock</th><th>Action</th><th>Price</th><th>Status</th></tr>{rows}</table>"
+    return render_template_string(BASE_HTML, title="Copy Trading", content=content, bg_image=get_inner_bg())
 
+# --- Algo Trading ---
+algo_mode = False
+algo_trades = []
+
+@app.route("/algotrading", methods=["GET", "POST"])
+@login_required
+def algotrading():
+    global algo_mode, algo_trades
+    if request.method == "POST":
+        mode = request.form.get("mode")
+        algo_mode = (mode == "ON")
+        return redirect(url_for("algotrading"))
+
+    res = safe_fetch(client.fetch_market_feed, market_feed)
+    if res and "Data" in res:
+        for s in res["Data"]:
+            price = s["LastRate"]
+            sig, _ = simple_strategy(price, s["Symbol"])
+            if algo_mode and sig in ["BUY", "SELL"]:
+                algo_trades.append({"stock": s["Symbol"], "price": price, "action": sig, "status": "Executed"})
+    rows = "".join([f"<tr><td>{t['stock']}</td><td>{t['action']}</td><td>{t['price']}</td><td>{t['status']}</td></tr>" for t in algo_trades])
+    content = f"""
+    <h2>Algo Trading</h2>
+    <form method='post'>
+      <label>Algo Mode:</label>
+      <select name='mode' onchange='this.form.submit()'>
+        <option value='OFF' {'selected' if not algo_mode else ''}>OFF</option>
+        <option value='ON' {'selected' if algo_mode else ''}>ON</option>
+      </select>
+    </form><br>
+    <table><tr><th>Stock</th><th>Action</th><th>Price</th><th>Status</th></tr>{rows}</table>
+    """
+    return render_template_string(BASE_HTML, title="Algo Trading", content=content, bg_image=get_inner_bg())
+
+# --- Portfolio ---
 @app.route("/portfolio")
 @login_required
 def portfolio():
@@ -279,17 +341,19 @@ def portfolio():
     ]
     for h in holdings:
         h["pl"] = round((h["current_price"] - h["buy_price"]) * h["qty"], 2)
-    rows = "".join([f"<tr><td>{h['stock']}</td><td>{h['qty']}</td><td>{h['buy_price']}</td><td>{h['current_price']}</td><td style='color:{'green' if h['pl']>=0 else 'red'}'>{h['pl']}</td></tr>" for h in holdings])
-    content = f"<h2>Portfolio Overview</h2><table><tr><th>Stock</th><th>Qty</th><th>Buy Price</th><th>Current Price</th><th>P/L</th></tr>{rows}</table>"
-    return render_template_string(base_html, title="Portfolio", content=content)
+    rows = "".join([f"<tr><td>{h['stock']}</td><td>{h['qty']}</td><td>{h['buy_price']}</td><td>{h['current_price']}</td><td style='color:{'#00ff99' if h['pl']>=0 else '#ff4d6d'}'>{h['pl']}</td></tr>" for h in holdings])
+    content = f"<h2>Portfolio (Mock)</h2><table><tr><th>Stock</th><th>Qty</th><th>Buy Price</th><th>Current Price</th><th>P/L</th></tr>{rows}</table>"
+    return render_template_string(BASE_HTML, title="Portfolio", content=content, bg_image=get_inner_bg())
 
+# --- Trade History ---
 @app.route("/history")
 @login_required
 def history():
     trades = list(mongo.db.trades.find().sort("_id", -1))
-    rows = "".join([f"<tr><td>{t.get('stock','')}</td><td>{t.get('signal','')}</td><td>{t.get('price','')}</td><td>{t.get('timestamp','')}</td></tr>" for t in trades])
-    content = f"<h2>Trade History (MongoDB)</h2><table><tr><th>Stock</th><th>Signal</th><th>Price</th><th>Timestamp</th></tr>{rows}</table>"
-    return render_template_string(base_html, title="History", content=content)
+    rows = "".join([f"<tr><td>{t.get('stock','-')}</td><td>{t.get('signal','-')}</td><td>{t.get('price','-')}</td><td>{t.get('timestamp','-')}</td></tr>" for t in trades])
+    content = f"<h2>Trade History (MongoDB)</h2><table><tr><th>Stock</th><th>Action</th><th>Price</th><th>Timestamp</th></tr>{rows}</table>"
+    return render_template_string(BASE_HTML, title="Trade History", content=content, bg_image=get_inner_bg())
 
 if __name__ == "__main__":
+    print(app.url_map)
     app.run(host="0.0.0.0", port=5000, debug=True)
