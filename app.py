@@ -26,10 +26,11 @@ stream_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(levelname)s | %(asctime)s | %(message)s', '%Y-%m-%d %H:%M:%S')
 stream_handler.setFormatter(formatter)
 
-if not app.logger.handlers:
-    app.logger.addHandler(stream_handler)
-
+# Always force logging to stdout for CloudWatch
+app.logger.handlers.clear()
+app.logger.addHandler(stream_handler)
 app.logger.setLevel(logging.INFO)
+
 
 # --- 5Paisa Credentials ---
 cred = {
@@ -433,4 +434,4 @@ def history():
 
 if __name__ == "__main__":
     print(app.url_map)
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)
